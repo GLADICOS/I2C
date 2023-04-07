@@ -2,22 +2,22 @@
      Design name : Felipe Fernandes da Costa
      Description: 
      
-     DATA_CONFIG_REG [0]    --> register to enable ip master mode 
-     DATA_CONFIG_REG [1]    --> 0 to read and 1 to write 
+     data_config_reg [0]    --> register to enable ip master mode 
+     data_config_reg [1]    --> 0 to read and 1 to write 
       
-     DATA_CONFIG_REG [13:2] -->  A parameter counter used to divide clock
+     data_config_reg [13:2] -->  A parameter counter used to divide clock
      
-     TIMEOUT_TX --> A Simple timeout should used  to see if count_timeout < TIMEOUT_TX
+     timeout_tx --> A Simple timeout should used  to see if count_timeout < timeout_tx
      
      HOW WORK THIS I2C
      
-     START There is a pattern indicates a start of transmit data
+     start There is a pattern indicates a start of transmit data
      NACK  Something goes wrong
-     ACK   Data send is fine  
+     ACK   data send is fine  
        
-     CONTROLIN --> Addressing controler 8 bit  addrerss and one bit aditional read write
-     ADDRESS STATES WHERE IN IP WILL STORE DATA 
-     DATA0 and DATA1 STATES WORD 16it Little endian to be delivered
+     CONTROLIN --> addressing controler 8 bit  addrerss and one bit aditional read write
+     address STATES WHERE IN IP WILL STORE data 
+     data0 and data1 STATES WORD 16it Little endian to be delivered
      
      
      Brazil -- 04/03/2023 -- initial tx i2c
@@ -33,11 +33,11 @@ module module_i2c_master#(
 		)
 		(
 		//I2C INTERFACE WITH ANOTHER BLOCKS
-		 input PCLK,
-		 input PRESETn,
+		 input pclk,
+		 input presetn,
 
 
-		//INTERFACE WITH FIFO RECEIVE DATA
+		//INTERFACE WITH FIFO RECEIVE data
 		 input fifo_rx_f_full,
 		 input fifo_rx_f_empty,
 		 
@@ -49,609 +49,616 @@ module module_i2c_master#(
 		 input [DWIDTH-1:0] fifo_tx_data_out,
 
 		//INTERFACE WITH REGISTER CONFIGURATION
-		 input [AWIDTH-1:0] DATA_CONFIG_REG,
- 		 input [AWIDTH-1:0] TIMEOUT_TX,
+		 input [AWIDTH-1:0] data_config_reg,
+ 		 input [AWIDTH-1:0] timeout_tx,
  		 	
 		//INTERFACE TO APB AND READ FOR FIFO   
 		 output reg fifo_tx_rd_en,
 		 output reg fifo_rx_wr_en,
 		 
 		 output reg [DFWIDTH-1:0] fifo_rx_data_in,
-		 output reg RESPONSE,
+		 output reg response,
 		 
-		 output ERROR,
+		 output error,
 
 		//I2C BI DIRETIONAL PORTS
-		 output PAD_EN_SDA,
-		 output PAD_EN_SCL,
-		 inout  SDA,
-		 output SCL	 
+		 output pad_en_sda,
+		 output pad_en_scl,
+		 inout  sda,
+		 output scl	 
 
 		 );
 
-	//THIS COUNT IS USED TO CONTROL DATA ACCROSS FSM	
+	//THIS COUNT IS USED TO CONTROL data ACCROSS FSM	
 	//reg [1:0] count_tx;
 	//CONTROL CLOCK AND COUNTER
 	reg [11:0] count_send_data;
 	//reg [11:0] count_receive_data;
 	reg [AWIDTH-1:0] count_timeout;
-	reg BR_CLK_O;
-	reg SDA_OUT;
+	reg br_clk_o;
+	reg sda_out;
 
-	//RESPONSE USED TO HOLD SIGNAL TO ACK OR NACK
-	//reg RESPONSE;
+	//response USED TO HOLD SIGNAL TO ACK OR NACK
+	reg [2:0] response_error;
 
 //    PARAMETERS USED TO STATE MACHINE
 
-localparam [5:0] IDLE = 6'd0, //IDLE
+localparam [5:0] idle = 6'd0, //idle
 
-	   START = 6'd1,//START BIT
+	   start = 6'd1,//start BIT
 	   
-	     CONTROLIN_1 = 6'd2, //START BYTE
-	     CONTROLIN_2 = 6'd3,
-	     CONTROLIN_3 = 6'd4,
-             CONTROLIN_4 = 6'd5,
-	     CONTROLIN_5 = 6'd6,
-	     CONTROLIN_6 = 6'd7,
-             CONTROLIN_7 = 6'd8,
-             CONTROLIN_8 = 6'd9, //END FIRST BYTE
+	     controlin_1 = 6'd2, //start BYTE
+	     controlin_2 = 6'd3,
+	     controlin_3 = 6'd4,
+             controlin_4 = 6'd5,
+	     controlin_5 = 6'd6,
+	     controlin_6 = 6'd7,
+             controlin_7 = 6'd8,
+             controlin_8 = 6'd9, //END FIRST BYTE
              
-             READ_WRITE  = 6'd10, //READ WRITE
+             read_write  = 6'd10, //READ WRITE
              
-	     RESPONSE_CIN =6'd11, //RESPONSE
+	     response_cin =6'd11, //response
 
-	     ADDRESS_1 = 6'd12,//START BYTE
-	     ADDRESS_2 = 6'd13,
-	     ADDRESS_3 = 6'd14,
-             ADDRESS_4 = 6'd15,
-	     ADDRESS_5 = 6'd16,
-	     ADDRESS_6 = 6'd17,
-             ADDRESS_7 = 6'd18,
-             ADDRESS_8 = 6'd19,//END FIRST BYTE
+	     address_1 = 6'd12,//start BYTE
+	     address_2 = 6'd13,
+	     address_3 = 6'd14,
+             address_4 = 6'd15,
+	     address_5 = 6'd16,
+	     address_6 = 6'd17,
+             address_7 = 6'd18,
+             address_8 = 6'd19,//END FIRST BYTE
 
-	     RESPONSE_ADDRESS =6'd20, //RESPONSE
+	     response_address =6'd20, //response
 
-	     DATA0_1 = 6'd21,//START BYTE
-	     DATA0_2 = 6'd22,
-	     DATA0_3 = 6'd23,
-             DATA0_4 = 6'd24,
-	     DATA0_5 = 6'd25,
-	     DATA0_6 = 6'd26,
-             DATA0_7 = 6'd27,
-             DATA0_8 = 6'd28,//END FIRST BYTE
+	     data0_1 = 6'd21,//start BYTE
+	     data0_2 = 6'd22,
+	     data0_3 = 6'd23,
+             data0_4 = 6'd24,
+	     data0_5 = 6'd25,
+	     data0_6 = 6'd26,
+             data0_7 = 6'd27,
+             data0_8 = 6'd28,//END FIRST BYTE
 	   
-	     DATA1_1 = 6'd29,//START BYTE
-	     DATA1_2 = 6'd30,
-	     DATA1_3 = 6'd31,
-             DATA1_4 = 6'd32,
-	     DATA1_5 = 6'd33,
-	     DATA1_6 = 6'd34,
-             DATA1_7 = 6'd35,
-             DATA1_8 = 6'd36,//END SECOND BYTE
+	     data1_1 = 6'd29,//start BYTE
+	     data1_2 = 6'd30,
+	     data1_3 = 6'd31,
+             data1_4 = 6'd32,
+	     data1_5 = 6'd33,
+	     data1_6 = 6'd34,
+             data1_7 = 6'd35,
+             data1_8 = 6'd36,//END SECOND BYTE
 
-	     RESPONSE_DATA1_1 = 6'd37,//RESPONSE
+	     response_data1_1 = 6'd37,//response
 
 	     //DELAY_BYTES = 6'd38,//USED ONLY IN ACK TO DELAY BETWEEN
 	     //NACK = 6'd39,//USED ONLY IN ACK TO DELAY BETWEEN BYTES
-	     STOP = 6'd38;//USED TO SEND STOP BIT
+	     stop = 6'd38;//USED TO SEND stop BIT
 
 	//STATE CONTROL 
 	reg [5:0] state_tx;
 	reg [5:0] next_state_tx;
 
 //ASSIGN REGISTERS TO BIDIRETIONAL PORTS
-assign SDA =(DATA_CONFIG_REG[0] == 1'b1 & state_tx != RESPONSE_CIN & state_tx != RESPONSE_ADDRESS & state_tx != RESPONSE_DATA1_1)?SDA_OUT:1'bz;
+assign sda =(data_config_reg[0] == 1'b1 & state_tx != response_cin & state_tx != response_address & state_tx != response_data1_1)?sda_out:1'bz;
 
 
-assign SCL = (DATA_CONFIG_REG[0] == 1'b1)?BR_CLK_O:1'bz;
+assign scl = (data_config_reg[0] == 1'b1)?br_clk_o:1'bz;
 
-//STANDARD ERROR
-assign ERROR = (count_timeout > TIMEOUT_TX)?1'b1:1'b0;
+//STANDARD error
+assign error = (count_timeout > timeout_tx | response_error == 3'd7)?1'b1:1'b0;
 
-assign PAD_EN_SDA = (DATA_CONFIG_REG[0] == 1'b1 & state_tx != RESPONSE_CIN & state_tx != RESPONSE_ADDRESS & state_tx != RESPONSE_DATA1_1)?1'b1:1'b0;
-assign PAD_EN_SCL = (DATA_CONFIG_REG[0] == 1'b1)?1'b1:1'b0;
+assign pad_en_sda = (data_config_reg[0] == 1'b1 & state_tx != response_cin & state_tx != response_address & state_tx != response_data1_1)?1'b1:1'b0;
+assign pad_en_scl = (data_config_reg[0] == 1'b1)?1'b1:1'b0;
 
 
 //COMBINATIONAL BLOCK TO   
 always@(*)
 begin
 
-	//THE FUN START HERE :-)
+	//THE FUN start HERE :-)
 	//COMBINATIONAL UPDATE STATE BE CAREFUL WITH WHAT YOU MAKE HERE
 	next_state_tx=state_tx;
 
 	case(state_tx)//state_   IS MORE SECURE CHANGE ONLY IF YOU KNOW WHAT ARE YOU DOING 
-	IDLE:
+	idle:
 	begin
 		//OBEYING SPEC
-		if(DATA_CONFIG_REG[0] == 1'b0 && (fifo_tx_f_full == 1'b1 || fifo_tx_f_empty == 1'b0))
+		if(data_config_reg[0] == 1'b0 && (fifo_tx_f_full == 1'b1 || fifo_tx_f_empty == 1'b0))
 		begin
-			next_state_tx   = IDLE;
+			next_state_tx   = idle;
 		end
-		else if(DATA_CONFIG_REG[0] == 1'b1 && (fifo_tx_f_full == 1'b1 || fifo_tx_f_empty == 1'b0))
+		else if(data_config_reg[0] == 1'b1 && (fifo_tx_f_full == 1'b1 || fifo_tx_f_empty == 1'b0))
 		begin
-			next_state_tx   = IDLE;
+			next_state_tx   = idle;
 		end
-		else if(DATA_CONFIG_REG[0] == 1'b1 && ((fifo_tx_f_full == 1'b0 && fifo_tx_f_empty == 1'b0) || fifo_tx_f_full == 1'b1) && DATA_CONFIG_REG[1] == 1'b0 && count_timeout < TIMEOUT_TX)
+		else if(data_config_reg[0] == 1'b1 && ((fifo_tx_f_full == 1'b0 && fifo_tx_f_empty == 1'b0) || fifo_tx_f_full == 1'b1) && data_config_reg[1] == 1'b0 && count_timeout < timeout_tx)
 		begin
-			next_state_tx   = START;
+			next_state_tx   = start;
 		end
 
 
 	end
-	START://THIS IS USED TOO ALL STATE MACHINES THE COUNTER_SEND_DATA
+	start://THIS IS USED TOO ALL STATE MACHINES THE COUNTER_SEND_data
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx   = START;
+			next_state_tx   = start;
 		end
 		else
 		begin
-			next_state_tx   = CONTROLIN_1;
+			next_state_tx   = controlin_1;
 		end
 		
 	end
-	CONTROLIN_1:
+	controlin_1:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  = CONTROLIN_1;
+			next_state_tx  = controlin_1;
 		end
 		else
 		begin
-			next_state_tx  =  CONTROLIN_2;
+			next_state_tx  =  controlin_2;
 		end
 
 	end
-	CONTROLIN_2:
+	controlin_2:
 	begin
 
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx   = CONTROLIN_2;
+			next_state_tx   = controlin_2;
 		end
 		else
 		begin
-			next_state_tx   = CONTROLIN_3;
+			next_state_tx   = controlin_3;
 		end
 
 	end
-	CONTROLIN_3:
+	controlin_3:
 	begin
 
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  =  CONTROLIN_3;
+			next_state_tx  =  controlin_3;
 		end
 		else
 		begin
-			next_state_tx   = CONTROLIN_4;
+			next_state_tx   = controlin_4;
 		end		
 	end
-	CONTROLIN_4:
+	controlin_4:
 	begin
 
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx   = CONTROLIN_4;
+			next_state_tx   = controlin_4;
 		end
 		else
 		begin
-			next_state_tx   = CONTROLIN_5;
+			next_state_tx   = controlin_5;
 		end		
 	end
-	CONTROLIN_5:
+	controlin_5:
 	begin
 
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = CONTROLIN_5;
+			next_state_tx = controlin_5;
 		end
 		else
 		begin
-			next_state_tx = CONTROLIN_6;
+			next_state_tx = controlin_6;
 		end		
 	end
-	CONTROLIN_6:
+	controlin_6:
 	begin
 
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = CONTROLIN_6;
+			next_state_tx = controlin_6;
 		end
 		else
 		begin
-			next_state_tx = CONTROLIN_7;
+			next_state_tx = controlin_7;
 		end		
 	end
-	CONTROLIN_7:
+	controlin_7:
 	begin
 
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = CONTROLIN_7;
+			next_state_tx = controlin_7;
 		end
 		else
 		begin
-			next_state_tx = CONTROLIN_8;
+			next_state_tx = controlin_8;
 		end		
 	end
-	CONTROLIN_8:
+	controlin_8:
 	begin
 
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  = CONTROLIN_8;
+			next_state_tx  = controlin_8;
 		end
 		else 
 		begin
-			next_state_tx  = READ_WRITE;
+			next_state_tx  = read_write;
 		end		
 	end
 	
-	READ_WRITE:
+	read_write:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  = READ_WRITE;
+			next_state_tx  = read_write;
 		end
 		else 
 		begin
-			next_state_tx  = RESPONSE_CIN;
+			next_state_tx  = response_cin;
 		end	
 	end
 	
-	RESPONSE_CIN:
+	response_cin:
 	begin
 
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = RESPONSE_CIN;
+			next_state_tx = response_cin;
 		end
-		else if(RESPONSE == 1'b0)//ACK
+		else if(response == 1'b0)//ACK
 		begin 
-			next_state_tx = CONTROLIN_1;
+			next_state_tx = controlin_1;
 		end
-		else if(RESPONSE == 1'b1)//NACK
+		else if(response == 1'b1)//NACK
 		begin
-			next_state_tx = STOP;
+			next_state_tx = stop;
 		end	
 		
 	end
 
-	//NOW SENDING ADDRESS
-	ADDRESS_1:
+	//NOW SENDING address
+	address_1:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  = ADDRESS_1;
+			next_state_tx  = address_1;
 		end
 		else
 		begin
-			next_state_tx  =  ADDRESS_2;
+			next_state_tx  =  address_2;
 		end	
 	end
-	ADDRESS_2:
+	address_2:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = ADDRESS_2;
+			next_state_tx = address_2;
 		end
 		else
 		begin
-			next_state_tx = ADDRESS_3;
+			next_state_tx = address_3;
 		end	
 	end
-	ADDRESS_3:
+	address_3:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = ADDRESS_3;
+			next_state_tx = address_3;
 		end
 		else
 		begin
-			next_state_tx = ADDRESS_4;
+			next_state_tx = address_4;
 		end	
 	end
-	ADDRESS_4:
+	address_4:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = ADDRESS_4;
+			next_state_tx = address_4;
 		end
 		else
 		begin
-			next_state_tx = ADDRESS_5;
+			next_state_tx = address_5;
 		end	
 	end
-	ADDRESS_5:
+	address_5:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = ADDRESS_5;
+			next_state_tx = address_5;
 		end
 		else
 		begin
-			next_state_tx = ADDRESS_6;
+			next_state_tx = address_6;
 		end	
 	end
-	ADDRESS_6:
+	address_6:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = ADDRESS_6;
+			next_state_tx = address_6;
 		end
 		else
 		begin
-			next_state_tx = ADDRESS_7;
+			next_state_tx = address_7;
 		end	
 	end
-	ADDRESS_7:
+	address_7:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = ADDRESS_7;
+			next_state_tx = address_7;
 		end
 		else
 		begin
-			next_state_tx = ADDRESS_8;
+			next_state_tx = address_8;
 		end	
 	end
-	ADDRESS_8:
+	address_8:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = ADDRESS_8;
+			next_state_tx = address_8;
 		end
 		else
 		begin
-			next_state_tx = RESPONSE_ADDRESS;
+			next_state_tx = response_address;
 		end	
 	end
 	
-	RESPONSE_ADDRESS:
+	response_address:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = RESPONSE_ADDRESS;
+			next_state_tx = response_address;
 		end
-		else if(RESPONSE == 1'b0)//ACK
+		else if(response == 1'b0)//ACK
 		begin 
-			next_state_tx = DATA0_1;
+			next_state_tx = data0_1;
 		end
-		else if(RESPONSE == 1'b1)//NACK --> RESTART CONDITION AND BACK TO START BYTE AGAIN
+		else if(response == 1'b1)//NACK --> RESTART CONDITION AND BACK TO start BYTE AGAIN
 		begin
-			next_state_tx = STOP;
+			next_state_tx = stop;
 		end	
 	end
 	
 	//data in
-	DATA0_1:
+	data0_1:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = DATA0_1;
+			next_state_tx = data0_1;
 		end
 		else
 		begin
-			next_state_tx = DATA0_2;
+			next_state_tx = data0_2;
 		end
 	end
-	DATA0_2:
+	data0_2:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = DATA0_2;
+			next_state_tx = data0_2;
 		end
 		else
 		begin
-			next_state_tx = DATA0_3;
+			next_state_tx = data0_3;
 		end
 	end
-	DATA0_3:
+	data0_3:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = DATA0_3;
+			next_state_tx = data0_3;
 		end
 		else
 		begin
-			next_state_tx = DATA0_4;
+			next_state_tx = data0_4;
 		end
 	end
-	DATA0_4:
+	data0_4:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = DATA0_4;
+			next_state_tx = data0_4;
 		end
 		else
 		begin
-			next_state_tx = DATA0_5;
+			next_state_tx = data0_5;
 		end
 	end
-	DATA0_5:
+	data0_5:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = DATA0_5;
+			next_state_tx = data0_5;
 		end
 		else
 		begin
-			next_state_tx   = DATA0_6;
+			next_state_tx   = data0_6;
 		end
 	end
-	DATA0_6:
+	data0_6:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  = DATA0_6;
+			next_state_tx  = data0_6;
 		end
 		else
 		begin
-			next_state_tx  = DATA0_7;
+			next_state_tx  = data0_7;
 		end
 	end
-	DATA0_7:
+	data0_7:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  = DATA0_7;
+			next_state_tx  = data0_7;
 		end
 		else
 		begin
-			next_state_tx  = DATA0_8;
+			next_state_tx  = data0_8;
 		end
 	end
-	DATA0_8:
+	data0_8:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  = DATA0_8;
+			next_state_tx  = data0_8;
 		end
 		else
 		begin
-			next_state_tx  =  DATA1_1;
+			next_state_tx  =  data1_1;
 		end
 	end
-	DATA1_1:
+	data1_1:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  = DATA1_1;
+			next_state_tx  = data1_1;
 		end
 		else
 		begin
-			next_state_tx  = DATA1_2;
+			next_state_tx  = data1_2;
 		end
 	end
-	DATA1_2:
+	data1_2:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = DATA1_2;
+			next_state_tx = data1_2;
 		end
 		else
 		begin
-			next_state_tx = DATA1_3;
+			next_state_tx = data1_3;
 		end
 	end
-	DATA1_3:
+	data1_3:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  = DATA1_3;
+			next_state_tx  = data1_3;
 		end
 		else
 		begin
-			next_state_tx  =  DATA1_4;
+			next_state_tx  =  data1_4;
 		end
 	end
-	DATA1_4:
+	data1_4:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  = DATA1_4;
+			next_state_tx  = data1_4;
 		end
 		else
 		begin
-			next_state_tx  = DATA1_5;
+			next_state_tx  = data1_5;
 		end
 	end
-	DATA1_5:
+	data1_5:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = DATA1_5;
+			next_state_tx = data1_5;
 		end
 		else
 		begin
-			next_state_tx = DATA1_6;
+			next_state_tx = data1_6;
 		end
 	end
-	DATA1_6:
+	data1_6:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx  =  DATA1_6;
+			next_state_tx  =  data1_6;
 		end
 		else
 		begin
-			next_state_tx  =  DATA1_7;
+			next_state_tx  =  data1_7;
 		end
 	end
-	DATA1_7:
+	data1_7:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx =  DATA1_7;
+			next_state_tx =  data1_7;
 		end
 		else
 		begin
-			next_state_tx =  DATA1_8;
+			next_state_tx =  data1_8;
 		end
 	end
-	DATA1_8:
+	data1_8:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = DATA1_8;
+			next_state_tx = data1_8;
 		end
 		else
 		begin
 				
-			if(DATA_CONFIG_REG[1])
+			if(data_config_reg[1])
 			begin
-			   next_state_tx = RESPONSE_DATA1_1;
+			   next_state_tx = response_data1_1;
 			end
 			else
 			begin
-			   next_state_tx = STOP;
+			   next_state_tx = stop;
 			end
 			
 		end
 	end
-	RESPONSE_DATA1_1:
+	response_data1_1:
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx   =  RESPONSE_DATA1_1;
+			next_state_tx   =  response_data1_1;
 		end
 		else
 		begin
-			if(DATA_CONFIG_REG[1])
-			begin
-			   next_state_tx = RESPONSE_DATA1_1;
-			end
-			else
-			begin
-				if(RESPONSE == 1'b0)//ACK
-				begin 
-					next_state_tx   =  STOP;
-				end
-				else if(RESPONSE == 1'b1)//NACK
-				begin
-					next_state_tx   =  DATA0_1;
-				end
-			end
 		
+			if(response)
+			begin
+				next_state_tx   =  data0_1;
+			end
+			else
+			begin			
+				next_state_tx   =  stop;
+			end
 		end
 			
 	end
-	STOP://THIS WORK
+	stop://THIS WORK
 	begin
-		if(count_send_data != DATA_CONFIG_REG[13:2])
+		if(count_send_data != data_config_reg[13:2])
 		begin
-			next_state_tx = STOP;
+			next_state_tx = stop;
 		end
 		else
 		begin
-			next_state_tx = IDLE;
+		
+			if(fifo_tx_f_empty)
+			begin
+				next_state_tx = idle;
+			end
+			else if(fifo_tx_f_full)
+			begin
+				next_state_tx = start;
+			end
+			else
+			begin
+				next_state_tx = start;
+			end		
+		
+			
 		end
 	end
 	default:
 	begin
-		next_state_tx =  IDLE;
+		next_state_tx =  idle;
 	end
 	endcase
 
@@ -661,369 +668,372 @@ end
 
 
 //SEQUENTIAL   
-always@(posedge PCLK)
+always@(posedge pclk)
 begin
 
 	//RESET SYNC
-	if(!PRESETn)
+	if(!presetn)
 	begin
 		//SIGNALS MUST BE RESETED
 		count_send_data <= 12'd0;
-		state_tx   <= IDLE;	
-		SDA_OUT<= 1'b1;
+		state_tx   <= idle;	
+		sda_out<= 1'b1;
 		fifo_tx_rd_en <= 1'b0;
 		//count_tx   <= 2'd0;
-		BR_CLK_O <= 1'b1;
-		RESPONSE<= 1'b0;	
+		response_error <= 3'd0;
+		br_clk_o <= 1'b1;
+		response<= 1'b0;	
 	end
 	else
 	begin
 		
-		// SEQUENTIAL FUN START
+		// SEQUENTIAL FUN start
 		state_tx  <= next_state_tx;
 
 		case(state_tx)
-		IDLE:
+		idle:
 		begin
 
 			fifo_tx_rd_en <= 1'b0;
-			
+			response_error <= 3'd0;
  
-			if(DATA_CONFIG_REG[0] == 1'b0 && (fifo_tx_f_full == 1'b1 ||fifo_tx_f_empty == 1'b0) && DATA_CONFIG_REG[1] == 1'b0)
+			if(data_config_reg[0] == 1'b0 && (fifo_tx_f_full == 1'b1 ||fifo_tx_f_empty == 1'b0) && data_config_reg[1] == 1'b0)
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<= 1'b1;
-				BR_CLK_O <= 1'b1;
+				sda_out<= 1'b1;
+				br_clk_o <= 1'b1;
 			end
-			else if(DATA_CONFIG_REG[0] == 1'b1 && ((fifo_tx_f_empty == 1'b0 && fifo_tx_f_full == 1'b0 )|| fifo_tx_f_full == 1'b1 ) && DATA_CONFIG_REG[1] == 1'b0)
+			else if(data_config_reg[0] == 1'b1 && ((fifo_tx_f_empty == 1'b0 && fifo_tx_f_full == 1'b0 )|| fifo_tx_f_full == 1'b1 ) && data_config_reg[1] == 1'b0)
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=1'b0;			
+				sda_out<=1'b0;			
 			end
-			else if(DATA_CONFIG_REG[0] == 1'b1 && (fifo_tx_f_full == 1'b1 ||fifo_tx_f_empty == 1'b0) && DATA_CONFIG_REG[1] == 1'b1)
+			else if(data_config_reg[0] == 1'b1 && (fifo_tx_f_full == 1'b1 ||fifo_tx_f_empty == 1'b0) && data_config_reg[1] == 1'b1)
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<= 1'b1;
-				BR_CLK_O <= 1'b1;
+				sda_out<= 1'b1;
+				br_clk_o <= 1'b1;
 			end			
 
 		end
-		START:
+		start:
 		begin
-
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			response_error <= 3'd0;
+			
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				BR_CLK_O <= 1'b0;
+				br_clk_o <= 1'b0;
 			end
 			else
 			begin
 				count_send_data <= 12'd0;					
 			end	
 
-			if(count_send_data == DATA_CONFIG_REG[13:2]- 12'd1)
+			if(count_send_data == data_config_reg[13:2]- 12'd1)
 			begin
-				SDA_OUT<=fifo_tx_data_out[0:0];
+				sda_out<=fifo_tx_data_out[0:0];
 				//count_tx   <= 2'd0;
 			end
 
 		end
-		CONTROLIN_1:
+		controlin_1:
 		begin
 
 			
-
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			response_error <= 3'd0;
+			
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[0:0];	
+				sda_out<=fifo_tx_data_out[0:0];	
 
 								
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end			
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[1:1];
+				sda_out<=fifo_tx_data_out[1:1];
 			end
 
 				
 		end
 		
-		CONTROLIN_2:
+		controlin_2:
 		begin
 
 			
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[1:1];
+				sda_out<=fifo_tx_data_out[1:1];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[2:2];
+				sda_out<=fifo_tx_data_out[2:2];
 			end
 				
 		end
 
-		CONTROLIN_3:
+		controlin_3:
 		begin
 
 			
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[2:2];
+				sda_out<=fifo_tx_data_out[2:2];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[3:3];
+				sda_out<=fifo_tx_data_out[3:3];
 			end	
 
 
 				
 		end
-		CONTROLIN_4:
+		controlin_4:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[3:3];
+				sda_out<=fifo_tx_data_out[3:3];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end				
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[4:4];
+				sda_out<=fifo_tx_data_out[4:4];
 			end
 				
 		end
 
-		CONTROLIN_5:
+		controlin_5:
 		begin
 
 			
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[4:4];
+				sda_out<=fifo_tx_data_out[4:4];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end			
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[5:5];
+				sda_out<=fifo_tx_data_out[5:5];
 			end	
 
 		end
-		CONTROLIN_6:
+		controlin_6:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[5:5];
+				sda_out<=fifo_tx_data_out[5:5];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end	
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[6:6];
+				sda_out<=fifo_tx_data_out[6:6];
 			end	
 
 				
 		end
 
-		CONTROLIN_7:
+		controlin_7:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[6:6];
+				sda_out<=fifo_tx_data_out[6:6];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end	
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[7:7];
+				sda_out<=fifo_tx_data_out[7:7];
 			end	
 
 				
 		end
-		CONTROLIN_8:
+		controlin_8:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[7:7];
+				sda_out<=fifo_tx_data_out[7:7];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<= 1'b0;
+				sda_out<= 1'b0;
 			end
 
 				
 		end
 		
-		READ_WRITE:
+		read_write:
 		begin
 		
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=DATA_CONFIG_REG[1];
+				sda_out<=data_config_reg[1];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<= 1'b0;
+				sda_out<= 1'b0;
 			end
 		
 		
 		end
 		
-		RESPONSE_CIN:
+		response_cin:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
 
 				//LETS TRY USE THIS BUT I DONT THINK IF WORKS  
-				RESPONSE<= SDA;
+				response<= sda;
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
@@ -1033,251 +1043,251 @@ begin
 
 
 		end
-		ADDRESS_1:
+		address_1:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[8:8];
+				sda_out<=fifo_tx_data_out[8:8];
 				
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[9:9];
+				sda_out<=fifo_tx_data_out[9:9];
 			end	
 				
 		end		
-		ADDRESS_2:
+		address_2:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[9:9];
+				sda_out<=fifo_tx_data_out[9:9];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[10:10];
+				sda_out<=fifo_tx_data_out[10:10];
 			end	
 
 		end
-		ADDRESS_3:
+		address_3:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[10:10];
+				sda_out<=fifo_tx_data_out[10:10];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end			
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[11:11];
+				sda_out<=fifo_tx_data_out[11:11];
 			end	
 
 		end
-		ADDRESS_4:
+		address_4:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[11:11];
+				sda_out<=fifo_tx_data_out[11:11];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end			
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[12:12];
+				sda_out<=fifo_tx_data_out[12:12];
 			end	
 		end
-		ADDRESS_5:
+		address_5:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[12:12];
+				sda_out<=fifo_tx_data_out[12:12];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end				
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[13:13];
+				sda_out<=fifo_tx_data_out[13:13];
 			end	
 
 				
 		end
-		ADDRESS_6:
+		address_6:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[13:13];
+				sda_out<=fifo_tx_data_out[13:13];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;		
-				SDA_OUT<=fifo_tx_data_out[14:14];
+				sda_out<=fifo_tx_data_out[14:14];
 			end	
 				
 		end
-		ADDRESS_7:
+		address_7:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[14:14];
+				sda_out<=fifo_tx_data_out[14:14];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=fifo_tx_data_out[15:15];
+				sda_out<=fifo_tx_data_out[15:15];
 			end	
 
 				
 		end
-		ADDRESS_8:
+		address_8:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				SDA_OUT<=fifo_tx_data_out[15:15];
+				sda_out<=fifo_tx_data_out[15:15];
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				SDA_OUT<=1'b0;
+				sda_out<=1'b0;
 			end	
 				
 		end
-		RESPONSE_ADDRESS:
+		response_address:
 		begin
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
 
 				//LETS TRY USE THIS BUT I DONT THINK IF WORKS  
-				RESPONSE<= SDA;
+				response<= sda;
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
@@ -1286,94 +1296,94 @@ begin
 			end
 
 		end
-		DATA0_1:
+		data0_1:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
 				
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				    SDA_OUT<=fifo_tx_data_out[16:16];
+				    sda_out<=fifo_tx_data_out[16:16];
 				end
 				else
 				begin
-				   fifo_rx_data_in[0:0] <= SDA;
+				   fifo_rx_data_in[0:0] <= sda;
 				end
 				
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;	
 				
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				    SDA_OUT<=fifo_tx_data_out[17:17];
+				    sda_out<=fifo_tx_data_out[17:17];
 				end
 				else
 				begin
-				   fifo_rx_data_in[1:1] <= SDA;
+				   fifo_rx_data_in[1:1] <= sda;
 				end			
 			end	
 
 				
 		end
-		DATA0_2:
+		data0_2:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
 				
 				
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				    SDA_OUT<=fifo_tx_data_out[17:17];
+				    sda_out<=fifo_tx_data_out[17:17];
 				end
 				else
 				begin
-				   fifo_rx_data_in[1:1] <= SDA;
+				   fifo_rx_data_in[1:1] <= sda;
 				end
 				
 				
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
 				
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[18:18];
+				   sda_out<=fifo_tx_data_out[18:18];
 				end
 				else
 				begin
-				   fifo_rx_data_in[2:2] <= SDA;
+				   fifo_rx_data_in[2:2] <= sda;
 				end
 								
 				
@@ -1381,593 +1391,593 @@ begin
 
 				
 		end		
-		DATA0_3:
+		data0_3:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
 				
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[18:18];
+				   sda_out<=fifo_tx_data_out[18:18];
 				end
 				else
 				begin
-				   fifo_rx_data_in[2:2] <= SDA;
+				   fifo_rx_data_in[2:2] <= sda;
 				end
 				
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
 				
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[19:19];
+				   sda_out<=fifo_tx_data_out[19:19];
 				end
 				else
 				begin
-				   fifo_rx_data_in[3:3] <= SDA;
+				   fifo_rx_data_in[3:3] <= sda;
 				end		
 			end	
 				
 		end
-		DATA0_4:
+		data0_4:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
 				
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[19:19];
+				   sda_out<=fifo_tx_data_out[19:19];
 				end
 				else
 				begin
-				   fifo_rx_data_in[3:3] <= SDA;
+				   fifo_rx_data_in[3:3] <= sda;
 				end
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
 				
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[20:20];
+				   sda_out<=fifo_tx_data_out[20:20];
 				end
 				else
 				begin
-				   fifo_rx_data_in[4:4] <= SDA;
+				   fifo_rx_data_in[4:4] <= sda;
 				end			
 			end	
 				
 		end
-		DATA0_5:
+		data0_5:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
 				
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[20:20];
+				   sda_out<=fifo_tx_data_out[20:20];
 				end
 				else
 				begin
-				   fifo_rx_data_in[4:4] <= SDA;
+				   fifo_rx_data_in[4:4] <= sda;
 				end	
 								
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end			
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[21:21];
+				   sda_out<=fifo_tx_data_out[21:21];
 				end
 				else
 				begin
-				   fifo_rx_data_in[5:5] <= SDA;
+				   fifo_rx_data_in[5:5] <= sda;
 				end
 			end
 
 		end
-		DATA0_6:
+		data0_6:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
 				
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[21:21];
+				   sda_out<=fifo_tx_data_out[21:21];
 				end
 				else
 				begin
-				   fifo_rx_data_in[5:5] <= SDA;
+				   fifo_rx_data_in[5:5] <= sda;
 				end
 				
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end			
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[22:22];
+				   sda_out<=fifo_tx_data_out[22:22];
 				end
 				else
 				begin
-				   fifo_rx_data_in[6:6] <= SDA;
+				   fifo_rx_data_in[6:6] <= sda;
 				end
 			end
 				
 		end
-		DATA0_7:
+		data0_7:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[22:22];
+				   sda_out<=fifo_tx_data_out[22:22];
 				end
 				else
 				begin
-				   fifo_rx_data_in[6:6] <= SDA;
+				   fifo_rx_data_in[6:6] <= sda;
 				end
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[23:23];
+				   sda_out<=fifo_tx_data_out[23:23];
 				end
 				else
 				begin
-				   fifo_rx_data_in[7:7] <= SDA;
+				   fifo_rx_data_in[7:7] <= sda;
 				end
 			end	
 				
 		end
-		DATA0_8:
+		data0_8:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[23:23];
+				   sda_out<=fifo_tx_data_out[23:23];
 				end
 				else
 				begin
-				   fifo_rx_data_in[7:7] <= SDA;
+				   fifo_rx_data_in[7:7] <= sda;
 				end
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[24:24];
+				   sda_out<=fifo_tx_data_out[24:24];
 				end
 				else
 				begin
-				   fifo_rx_data_in[8:8] <= SDA;
+				   fifo_rx_data_in[8:8] <= sda;
 				end
 			end	
 				
 		end
-		DATA1_1:
+		data1_1:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[24:24];
+				   sda_out<=fifo_tx_data_out[24:24];
 				end
 				else
 				begin
-				   fifo_rx_data_in[8:8] <= SDA;
+				   fifo_rx_data_in[8:8] <= sda;
 				end
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end				
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[25:25];
+				   sda_out<=fifo_tx_data_out[25:25];
 				end
 				else
 				begin
-				   fifo_rx_data_in[9:9] <= SDA;
+				   fifo_rx_data_in[9:9] <= sda;
 				end
 
 			end
 
 				
 		end
-		DATA1_2:
+		data1_2:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[25:25];
+				   sda_out<=fifo_tx_data_out[25:25];
 				end
 				else
 				begin
-				   fifo_rx_data_in[9:9] <= SDA;
+				   fifo_rx_data_in[9:9] <= sda;
 				end
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end	
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[26:26];
+				   sda_out<=fifo_tx_data_out[26:26];
 				end
 				else
 				begin
-				   fifo_rx_data_in[10:10] <= SDA;
+				   fifo_rx_data_in[10:10] <= sda;
 				end
 			end	
 
 		end
-		DATA1_3:
+		data1_3:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[26:26];
+				   sda_out<=fifo_tx_data_out[26:26];
 				end
 				else
 				begin
-				   fifo_rx_data_in[10:10] <= SDA;
+				   fifo_rx_data_in[10:10] <= sda;
 				end
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end			
 
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[27:27];
+				   sda_out<=fifo_tx_data_out[27:27];
 				end
 				else
 				begin
-				   fifo_rx_data_in[11:11] <= SDA;
+				   fifo_rx_data_in[11:11] <= sda;
 				end
 			end	
 				
 		end
-		DATA1_4:
+		data1_4:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[27:27];
+				   sda_out<=fifo_tx_data_out[27:27];
 				end
 				else
 				begin
-				   fifo_rx_data_in[11:11] <= SDA;
+				   fifo_rx_data_in[11:11] <= sda;
 				end
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end			
 
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[28:28];
+				   sda_out<=fifo_tx_data_out[28:28];
 				end
 				else
 				begin
-				   fifo_rx_data_in[12:12] <= SDA;
+				   fifo_rx_data_in[12:12] <= sda;
 				end
 			end	
 				
 		end
-		DATA1_5:
+		data1_5:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[28:28];
+				   sda_out<=fifo_tx_data_out[28:28];
 				end
 				else
 				begin
-				   fifo_rx_data_in[12:12] <= SDA;
+				   fifo_rx_data_in[12:12] <= sda;
 				end
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[29:29];
+				   sda_out<=fifo_tx_data_out[29:29];
 				end
 				else
 				begin
-				   fifo_rx_data_in[13:13] <= SDA;
+				   fifo_rx_data_in[13:13] <= sda;
 				end
 			end	
 				
 		end
-		DATA1_6:
+		data1_6:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[29:29];
+				   sda_out<=fifo_tx_data_out[29:29];
 				end
 				else
 				begin
-				   fifo_rx_data_in[13:13] <= SDA;
+				   fifo_rx_data_in[13:13] <= sda;
 				end
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[30:30];
+				   sda_out<=fifo_tx_data_out[30:30];
 				end
 				else
 				begin
-				   fifo_rx_data_in[14:14] <= SDA;
+				   fifo_rx_data_in[14:14] <= sda;
 				end
 			end	
 				
 		end
-		DATA1_7:
+		data1_7:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[30:30];
+				   sda_out<=fifo_tx_data_out[30:30];
 				end
 				else
 				begin
-				   fifo_rx_data_in[14:14] <= SDA;
+				   fifo_rx_data_in[14:14] <= sda;
 				end
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[31:31];
+				   sda_out<=fifo_tx_data_out[31:31];
 				end
 				else
 				begin
-				   fifo_rx_data_in[15:15] <= SDA;
+				   fifo_rx_data_in[15:15] <= sda;
 				end
 			end	
 
 				
 		end
-		DATA1_8:
+		data1_8:
 		begin
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=fifo_tx_data_out[31:31];
+				   sda_out<=fifo_tx_data_out[31:31];
 				end
 				else
 				begin
-				   fifo_rx_data_in[15:15] <= SDA;
+				   fifo_rx_data_in[15:15] <= sda;
 				end
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(count_send_data < data_config_reg[13:2]/12'd4)
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
 				begin
-					BR_CLK_O <= 1'b1;
+					br_clk_o <= 1'b1;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					br_clk_o <= 1'b0;
 				end		
 
 			end
@@ -1975,76 +1985,143 @@ begin
 			begin
 				count_send_data <= 12'd0;
 				
-				if(DATA_CONFIG_REG[1])
+				if(data_config_reg[1])
 				begin
-				   SDA_OUT<=1'b0;
+				   sda_out<=1'b0;
 				end
 				else
 				begin
-				   fifo_rx_wr_en <= 1'b1;
+				
+				   if(fifo_rx_f_empty)
+				   begin
+				   	fifo_rx_wr_en <= 1'b1;
+				   	response <= 1'b0;
+				   end
+				   else if(fifo_rx_f_full)
+				   begin
+				   	fifo_rx_wr_en <= 1'b0;
+				   	
+				   	if(response_error == 3'd7)
+				   	begin
+				   		response_error <= response_error;
+				   	end
+				   	else
+				   	begin
+				   		response_error <= response_error + 3'd1;
+				   	end
+				   	
+				   	response <= 1'b1;
+				   end
+				   else
+				   begin
+				   	fifo_rx_wr_en <= 1'b1;
+				   	response <= 1'b0;
+				   end
+				   
 				end				
 				
 				
 			end	
 				
 		end
-		RESPONSE_DATA1_1:
+		response_data1_1:
 		begin
-			//fifo_  _rd_en <= 1'b1;
+			fifo_rx_wr_en <= 1'b0;
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
 
-				//LETS TRY USE THIS BUT I DONT THINK IF WORKS  
-				RESPONSE<= SDA;
-
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd4)
+				if(data_config_reg[1])
 				begin
-					BR_CLK_O <= 1'b0;
-				end
-				else if(count_send_data >= DATA_CONFIG_REG[13:2]/12'd4 && count_send_data < (DATA_CONFIG_REG[13:2]-(DATA_CONFIG_REG[13:2]/12'd4))-12'd1)
-				begin
-					BR_CLK_O <= 1'b1;
+					sda_out <= response;
 				end
 				else
 				begin
-					BR_CLK_O <= 1'b0;
+					//LETS TRY USE THIS BUT I DONT THINK IF WORKS  
+					response<= sda;										
+				end
+				
+				if(count_send_data < data_config_reg[13:2]/12'd4)
+				begin
+					br_clk_o <= 1'b0;
+				end
+				else if(count_send_data >= data_config_reg[13:2]/12'd4 && count_send_data < (data_config_reg[13:2]-(data_config_reg[13:2]/12'd4))-12'd1)
+				begin
+					br_clk_o <= 1'b1;
+				end
+				else
+				begin
+					br_clk_o <= 1'b0;
 				end		
 			end
 			else
 			begin
 				count_send_data <= 12'd0;
-				fifo_tx_rd_en <= 1'b1;
+				
+				if(response)
+				begin
+				   	if(response_error == 3'd7)
+				   	begin
+				   		response_error <= response_error;
+				   		response <= response;
+				   	end
+				   	else
+				   	begin
+				   		response_error <= response_error + 3'd1;
+				   		response<=1'b1;
+				   	end					
+				end
+				else
+				begin
+					response_error <= response_error;
+					response <= response;
+				end			
+				
+				if(fifo_tx_f_empty)
+				begin
+					fifo_tx_rd_en <= 1'b0;
+				end
+				else if(fifo_tx_f_full)
+				begin
+					fifo_tx_rd_en <= 1'b1;
+				end
+				else
+				begin
+					fifo_tx_rd_en <= 1'b1;
+				end
+				
 			end	
 
 		end
-		STOP:
+		stop:
 		begin
 
-			BR_CLK_O <= 1'b1;
+			br_clk_o <= 1'b1;
 
-			if(count_send_data < DATA_CONFIG_REG[13:2])
+			if(count_send_data < data_config_reg[13:2])
 			begin
 				count_send_data <= count_send_data + 12'd1;
 
-				if(count_send_data < DATA_CONFIG_REG[13:2]/12'd2-12'd2)
+				if(count_send_data < data_config_reg[13:2]/12'd2-12'd2)
 				begin
-					SDA_OUT<=1'b0;
+					sda_out<=1'b0;
 				end
-				else if(count_send_data > DATA_CONFIG_REG[13:2]/12'd2-12'd1 && count_send_data < DATA_CONFIG_REG[13:2])
+				else if(count_send_data > data_config_reg[13:2]/12'd2-12'd1 && count_send_data < data_config_reg[13:2])
 				begin
-					SDA_OUT<=1'b1;
+					sda_out<=1'b1;
 				end	
 			end
 			else
 			begin
+				response_error <= response_error;
 				count_send_data <= 12'd0;
 			end
 		end
 		default:
 		begin
 			fifo_tx_rd_en <= 1'b0;
+			response_error <= 3'd0;
 			count_send_data <= 12'd4095;
 		end
 		endcase
@@ -2055,19 +2132,19 @@ begin
 end 
 
 //USED ONLY TO COUNTER TIME
-always@(posedge PCLK)
+always@(posedge pclk)
 begin
 
 	//RESET SYNC
-	if(!PRESETn)
+	if(!presetn)
 	begin
 		count_timeout <= 14'd0;
 	end
 	else
 	begin
-		if(count_timeout <= TIMEOUT_TX && state_tx == IDLE)
+		if(count_timeout <= timeout_tx && state_tx == idle)
 		begin
-			if(SDA == 1'b0 && SCL == 1'b0)
+			if(sda == 1'b0 && scl == 1'b0)
 			count_timeout <= count_timeout + 14'd1;
 		end
 		else

@@ -24,103 +24,103 @@
 
 module apb(
 			//standard ARM
-	    		input PCLK,
-			input PRESETn,
-			input PSELx,
-			input PWRITE,
-			input PENABLE,
-			input [31:0] PADDR,
-			input [31:0] PWDATA,
+	    		input pclk,
+			input presetn,
+			input pselx,
+			input pwrite,
+			input penable,
+			input [31:0] paddr,
+			input [31:0] pwdata,
 
 			//internal pin FIFO RX/TX
-			input TX_EMPTY,
-			input TX_FULL,
-			input [15:0] READ_DATA_OUT_RX,
-			input RX_EMPTY,
-			input RX_FULL,						
+			input tx_empty,
+			input tx_full,
+			input [15:0] read_data_out_rx,
+			input rx_empty,
+			input rx_full,						
 	
 			//CURRENT DATA FROM i2C
 
-	                input [31:0] CURRENT_DATA_TX,
+	                input [31:0] current_data_tx,
 	                
 	                	               
 			//internal I2C error
-			input ERROR,
-	                input RESPONSE_ACK_NACK,
+			input error,
+	                input response_ack_nack,
 
 	                
 			//internal pin FIFO RX/TX
 	                //output  [31:0] READ_DATA_IN_TX, 
-			output  RD_ENA_RX,		
-			output  WR_ENA_TX,
+			output  rd_ena_rx,		
+			output  wr_ena_tx,
 			
 			//external APB pin
-			output [31:0] PRDATA,
+			output [31:0] prdata,
 
 			//internal pin 
-			output reg [13:0] INTERNAL_I2C_REGISTER_CONFIG,
-			output reg [13:0] INTERNAL_I2C_REGISTER_TIMEOUT,
-			output [31:0] WRITE_DATA_ON_TX,		
+			output reg [13:0] internal_i2c_register_config,
+			output reg [13:0] internal_i2c_register_timeout,
+			output [31:0] write_data_on_tx,		
 			
 			//external APB port 
-			output PREADY,
-			output PSLVERR,
+			output pready,
+			output pslverr,
 
 			//external APB interruption
-			output INT_RX,
-			output INT_TX
+			output int_rx,
+			output int_tx
 	   
 
 	  );
 
 //ENABLE WRITE ON TX FIFO
-assign WR_ENA_TX = (PWRITE == 1'b1 & PENABLE == 1'b1 & PADDR == 32'd0 & PSELx == 1'b1)?  1'b1:1'b0;
+assign wr_ena_tx = (pwrite == 1'b1 & penable == 1'b1 & paddr == 32'd0 & pselx == 1'b1)?  1'b1:1'b0;
 
 //ENABLE READ ON RX FIFO
-assign RD_ENA_RX = (PWRITE == 1'b0 & PENABLE == 1'b1  & PADDR == 32'd4 & PSELx == 1'b1)?  1'b1:1'b0;
+assign rd_ena_rx = (pwrite == 1'b0 & penable == 1'b1  & paddr == 32'd4 & pselx == 1'b1)?  1'b1:1'b0;
 
 //WRITE ON I2C MODULE
-assign PREADY = ((WR_ENA_TX == 1'b1 | RD_ENA_RX == 1'b1 | PADDR == 32'd8 | PADDR == 32'd12) &  (PENABLE == 1'b1 & PSELx == 1'b1))? 1'b1:1'b0;
+assign pready = ((wr_ena_tx == 1'b1 | rd_ena_rx == 1'b1 | paddr == 32'd8 | paddr == 32'd12) &  (penable == 1'b1 & pselx == 1'b1))? 1'b1:1'b0;
 
 //INPUT TO WRITE ON TX FIFO
-assign WRITE_DATA_ON_TX = (PADDR == 32'd0)? PWDATA:PWDATA;
+assign write_data_on_tx = (paddr == 32'd0)? pwdata:pwdata;
 
-//OUTPUT DATA FROM RX TO PRDATA
-assign PRDATA = (PADDR == 32'd4)? {16'd0,READ_DATA_OUT_RX}:(PADDR == 32'd16)?CURRENT_DATA_TX:CURRENT_DATA_TX;
+//OUTPUT DATA FROM RX TO prdata
+assign prdata = (paddr == 32'd4)? {16'd0,read_data_out_rx}:(paddr == 32'd16)?current_data_tx:current_data_tx;
 
-//ERROR FROM I2C CORE
-assign PSLVERR = (ERROR || RESPONSE_ACK_NACK)?1'b1:1'b0; 
-
-//INTERRUPTION FROM I2C
-assign INT_TX = (TX_EMPTY || TX_FULL)?1'b1:1'b0;
+//error FROM I2C CORE
+assign pslverr = (error || response_ack_nack)?1'b1:1'b0; 
 
 //INTERRUPTION FROM I2C
-assign INT_RX = (RX_EMPTY || RX_FULL)?1'b1:1'b0;
+assign int_tx = (tx_empty || tx_full)?1'b1:1'b0;
+
+//INTERRUPTION FROM I2C
+assign int_rx = (rx_empty || rx_full)?1'b1:1'b0;
 
 //This is sequential logic used only to register configuration
-always@(posedge PCLK)
+always@(posedge pclk)
 begin
 
-	if(!PRESETn)
+	if(!presetn)
 	begin
-		INTERNAL_I2C_REGISTER_CONFIG <= 14'd0;
-		INTERNAL_I2C_REGISTER_TIMEOUT <= 14'd0;
+		internal_i2c_register_config <= 14'd0;
+		internal_i2c_register_timeout <= 14'd0;
 	end
 	else
 	begin
 
 		// Set configuration to i2c
-		if(PADDR == 32'd8 && PSELx == 1'b1 && PWRITE == 1'b1 && PREADY == 1'b1)
+		if(paddr == 32'd8 && pselx == 1'b1 && pwrite == 1'b1 && pready == 1'b1)
 		begin
-			INTERNAL_I2C_REGISTER_CONFIG <= PWDATA[13:0];
+			internal_i2c_register_config <= pwdata[13:0];
 		end
-		else if(PADDR == 32'd12 && PSELx == 1'b1 && PWRITE == 1'b1 && PREADY == 1'b1)
+		else if(paddr == 32'd12 && pselx == 1'b1 && pwrite == 1'b1 && pready == 1'b1)
 		begin
-			INTERNAL_I2C_REGISTER_TIMEOUT <= PWDATA[13:0];
+			internal_i2c_register_timeout <= pwdata[13:0];
 		end
 		else
 		begin
-			INTERNAL_I2C_REGISTER_CONFIG <= INTERNAL_I2C_REGISTER_CONFIG;
+			internal_i2c_register_config <= internal_i2c_register_config;
 		end
 		
 	end

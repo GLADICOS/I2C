@@ -1,28 +1,28 @@
 module top_i2c_master(
-	    		input PCLK,
-			input PRESETn,
-			input PSELx,
-			input PWRITE,
-			input PENABLE,
-			input [31:0] PADDR,
-			input [31:0] PWDATA,				
+	    		input pclk,
+			input presetn,
+			input pselx,
+			input pwrite,
+			input penable,
+			input [31:0] paddr,
+			input [31:0] pwdata,				
 		
 			//external APB pin
-			output [31:0] PRDATA,
+			output [31:0] prdata,
 			
 			//external APB port 
-			output PREADY,
-			output PSLVERR,
+			output pready,
+			output pslverr,
 
 			//external APB interruption
-			output INT_RX,
-			output INT_TX,
+			output int_rx,
+			output int_tx,
 			
 			//I2C BI DIRETIONAL PORTS
-			output PAD_EN_SDA,
-			output PAD_EN_SCL,
-			inout  SDA,
-			output SCL			
+			output pad_en_sda,
+			output pad_en_scl,
+			inout  sda,
+			output scl			
 			
 		     );
 
@@ -58,57 +58,57 @@ module top_i2c_master(
 
     apb APB_MASTER (
     
-	    		.PCLK(PCLK),
-			.PRESETn(PRESETn),
-			.PSELx(PSELx),
-			.PWRITE(PWRITE),
-			.PENABLE(PENABLE),
-			.PADDR(PADDR),
-			.PWDATA(PWDATA),
+	    		.pclk(pclk),
+			.presetn(presetn),
+			.pselx(pselx),
+			.pwrite(pwrite),
+			.penable(penable),
+			.paddr(paddr),
+			.pwdata(pwdata),
 
 			//internal pin FIFO RX/TX
-			.TX_EMPTY(w_fifo_tx_f_empty),
-			.TX_FULL(w_fifo_tx_f_full),
-			.READ_DATA_OUT_RX(w_data_out_rx),
-			.RX_EMPTY(w_fifo_rx_f_empty),
-			.RX_FULL(w_fifo_rx_f_full),						
+			.tx_empty(w_fifo_tx_f_empty),
+			.tx_full(w_fifo_tx_f_full),
+			.read_data_out_rx(w_data_out_rx),
+			.rx_empty(w_fifo_rx_f_empty),
+			.rx_full(w_fifo_rx_f_full),						
 	
 			//CURRENT DATA FROM i2C
 
-	                .CURRENT_DATA_TX(w_data_out_tx),
+	                .current_data_tx(w_data_out_tx),
 	                
 	                	               
 			//internal I2C error
-			.ERROR(w_error),
-	                .RESPONSE_ACK_NACK(w_response_ack_nack),
+			.error(w_error),
+	                .response_ack_nack(w_response_ack_nack),
 
 	                
 			//internal pin FIFO RX/TX
 	                //output  [31:0] READ_DATA_IN_TX, 
-			.RD_ENA_RX(w_rd_en_rx),		
-			.WR_ENA_TX(w_wr_en_tx),
+			.rd_ena_rx(w_rd_en_rx),		
+			.wr_ena_tx(w_wr_en_tx),
 			
 			//external APB pin
-			 .PRDATA(PRDATA),
+			 .prdata(prdata),
 
 			//internal pin 
-			.INTERNAL_I2C_REGISTER_CONFIG(w_internal_i2c_register_config),
-			.INTERNAL_I2C_REGISTER_TIMEOUT(w_timeout_tx),
-			.WRITE_DATA_ON_TX(w_write_data_on_tx),		
+			.internal_i2c_register_config(w_internal_i2c_register_config),
+			.internal_i2c_register_timeout(w_timeout_tx),
+			.write_data_on_tx(w_write_data_on_tx),		
 			
 			//external APB port 
-			.PREADY(PREADY),
-			.PSLVERR(PSLVERR),
+			.pready(pready),
+			.pslverr(pslverr),
 
 			//external APB interruption
-			.INT_RX(INT_RX),
-			.INT_TX(INT_TX)   
+			.int_rx(int_rx),
+			.int_tx(int_tx)   
     		   );
     		   
     		   
     fifo FIFO_TX(
-	 	.clock(PCLK), 
-	 	.reset(PRESETn), 
+	 	.clock(pclk), 
+	 	.reset(presetn), 
 	 	.wr_en(w_wr_en_tx), 
 	 	.rd_en(w_fifo_tx_rd_en),
 		.data_in(w_write_data_on_tx),
@@ -120,8 +120,8 @@ module top_i2c_master(
                 
     fifo #(.DWIDTH(DWIDTH),.AWIDTH(AWIDTH))
     		 FIFO_RX (
-	  	.clock(PCLK), 
-	 	.reset(PRESETn), 
+	  	.clock(pclk), 
+	 	.reset(presetn), 
 	 	.wr_en(w_fifo_rx_wr_en), 
 	 	.rd_en(w_rd_en_rx),
 		.data_in(w_data_in_rx),
@@ -133,8 +133,8 @@ module top_i2c_master(
                 
    module_i2c_master I2CMASTER(
 				//I2C INTERFACE WITH ANOTHER BLOCKS
-				 .PCLK(PCLK),
-				 .PRESETn(PRESETn),
+				 .pclk(pclk),
+				 .presetn(presetn),
 
 
 				//INTERFACE WITH FIFO RECEIVE DATA
@@ -149,8 +149,8 @@ module top_i2c_master(
 				 .fifo_tx_data_out(w_data_out_tx),
 
 				//INTERFACE WITH REGISTER CONFIGURATION
-				 .DATA_CONFIG_REG(w_internal_i2c_register_config),
-		 		 .TIMEOUT_TX(w_timeout_tx),
+				 .data_config_reg(w_internal_i2c_register_config),
+		 		 .timeout_tx(w_timeout_tx),
 		 		 	
 				//INTERFACE TO APB AND READ FOR FIFO   
 				 .fifo_tx_rd_en(w_fifo_tx_rd_en),
@@ -158,14 +158,14 @@ module top_i2c_master(
 				 
 				 .fifo_rx_data_in(w_data_in_rx),
 
-				 .ERROR(w_error),
-				 .RESPONSE(w_response_ack_nack),
+				 .error(w_error),
+				 .response(w_response_ack_nack),
 
 				//I2C BI DIRETIONAL PORTS
-				 .PAD_EN_SDA(PAD_EN_SDA),
-				 .PAD_EN_SCL(PAD_EN_SCL),
-				 .SDA(SDA),
-				 .SCL(SCL)	   
+				 .pad_en_sda(pad_en_sda),
+				 .pad_en_scl(pad_en_scl),
+				 .sda(sda),
+				 .scl(scl)	   
                               );              
                                
 
