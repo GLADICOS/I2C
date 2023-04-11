@@ -681,6 +681,7 @@ begin
 		fifo_tx_rd_en <= 1'b0;
 		//count_tx   <= 2'd0;
 		response_error <= 3'd0;
+		fifo_rx_data_in <= 16'd0;
 		br_clk_o <= 1'b1;
 		response<= 1'b0;	
 	end

@@ -86,16 +86,16 @@ assign pready = ((wr_ena_tx == 1'b1 | rd_ena_rx == 1'b1 | paddr == 32'd8 | paddr
 assign write_data_on_tx = (paddr == 32'd0)? pwdata:pwdata;
 
 //OUTPUT DATA FROM RX TO prdata
-assign prdata = (paddr == 32'd4)? {16'd0,read_data_out_rx}:(paddr == 32'd16)?current_data_tx:current_data_tx;
+assign prdata = (paddr == 32'd0)? 32'd0:(paddr == 32'd4)? {16'd0,read_data_out_rx}:(paddr == 32'd16)?current_data_tx:current_data_tx;
 
 //error FROM I2C CORE
 assign pslverr = (error || response_ack_nack)?1'b1:1'b0; 
 
 //INTERRUPTION FROM I2C
-assign int_tx = (tx_empty || tx_full)?1'b1:1'b0;
+assign int_tx = (!tx_empty & tx_full)?1'b1:1'b0;
 
 //INTERRUPTION FROM I2C
-assign int_rx = (rx_empty || rx_full)?1'b1:1'b0;
+assign int_rx = (!rx_empty & rx_full)?1'b1:1'b0;
 
 //This is sequential logic used only to register configuration
 always@(posedge pclk)

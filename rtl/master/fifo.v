@@ -43,6 +43,23 @@ module fifo
 		if (!reset)
 		begin
 			wr_ptr <= {(AWIDTH){1'b0}};
+			
+			mem[0] <= {(DWIDTH){1'b0}};
+			mem[1] <= {(DWIDTH){1'b0}};
+			mem[2] <= {(DWIDTH){1'b0}};
+			mem[4] <= {(DWIDTH){1'b0}};
+			mem[5] <= {(DWIDTH){1'b0}};
+			mem[6] <= {(DWIDTH){1'b0}};
+			mem[7] <= {(DWIDTH){1'b0}};
+			mem[8] <= {(DWIDTH){1'b0}};
+			mem[9] <= {(DWIDTH){1'b0}};
+			mem[10] <= {(DWIDTH){1'b0}};
+			mem[11] <= {(DWIDTH){1'b0}};
+			mem[12] <= {(DWIDTH){1'b0}};
+			mem[13] <= {(DWIDTH){1'b0}};
+			mem[14] <= {(DWIDTH){1'b0}};
+			mem[15] <= {(DWIDTH){1'b0}};
+									
 		end
 		else if (wr_en && !f_full)
 		begin
